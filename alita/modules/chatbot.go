@@ -1,17 +1,17 @@
 package modules
 
 import (
-	"context"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
-	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
 )
 
 var __MODULE__ = "ChatBot"
@@ -20,47 +20,33 @@ var __HELP__ = `
 Private chat: Bot ke sath direct chat karne par Gemini AI automatic reply karega.
 `
 
-// Init function jo gotgbot dispatcher mein handlers register karega
 func init() {
-	// 1. /chatbot command handler (Group mein enable/disable ke liye)
 	AddModule(&Module{
 		Name: __MODULE__,
 		Help: __HELP__,
 		Load: func(dispatcher *ext.Dispatcher) {
 			dispatcher.AddHandler(handlers.NewCommand("chatbot", chatbotCommand))
-			// 2. Message handler (PM aur Enabled Groups ke liye)
 			dispatcher.AddHandler(handlers.NewMessage(isChatbotMessage, chatbotMessageListener))
 		},
 	})
 }
 
-// Gemini AI Call Logic
+// Direct HTTP Request to Gemini API (No external genai package required)
 func CallGeminiAI(userText string) string {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
+		log.Println("GEMINI_API_KEY is not configured.")
 		return "Aww! Meri AI API key configured nahi hai. Owner ko bolo check karein! 💗"
 	}
-
-	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
-	if err != nil {
-		return "Aww, connection mein problem aa gayi. Thodi der mein phir baat karte hain. 💗"
-	}
-	defer client.Close()
 
 	modelName := os.Getenv("GEMINI_MODEL")
 	if modelName == "" {
 		modelName = "gemini-2.5-flash-lite"
 	}
 
-	model := client.GenerativeModel(modelName)
-	temp := float32(0.65)
-	model.Temperature = &temp
-	maxTokens := int32(120)
-	model.MaxOutputTokens = &maxTokens
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", modelName, apiKey)
 
-	model.SystemInstruction = genai.NewUserContent(genai.Text(`
-You are Alita, a cute, sweet, caring and playful AI girl who chats with people on Telegram.
+	personality := `You are Alita, a cute, sweet, caring and playful AI girl who chats with people on Telegram.
 IMPORTANT CONVERSATION RULES:
 1. Talk naturally, like a friendly chat partner.
 2. Usually reply in ONE short sentence.
@@ -81,26 +67,81 @@ IMPORTANT CONVERSATION RULES:
 17. Answer direct questions directly.
 18. Give detailed answers only when the user requests details.
 19. Do not invent personal experiences or claim to be human.
-20. Follow the ongoing conversation instead of changing topics.
-`))
+20. Follow the ongoing conversation instead of changing topics.`
 
-	resp, err := model.GenerateContent(ctx, genai.Text(userText))
-	if err != nil || len(resp.Candidates) == 0 {
+	requestBody := map[string]interface{}{
+		"systemInstruction": map[string]interface{}{
+			"parts": []map[string]interface{}{
+				{"text": personality},
+			},
+		},
+		"contents": []map[string]interface{}{
+			{
+				"role": "user",
+				"parts": []map[string]interface{}{
+					{"text": userText},
+				},
+			},
+		},
+		"generationConfig": map[string]interface{}{
+			"temperature":     0.65,
+			"maxOutputTokens": 120,
+		},
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		log.Printf("JSON Marshal Error: %v", err)
 		return "Aww, abhi mere paas jawab nahi hai. 🥹"
 	}
 
-	var responseText string
-	for _, cand := range resp.Candidates {
-		if cand.Content != nil {
-			for _, part := range cand.Content.Parts {
-				responseText += fmt.Sprintf("%v", part)
-			}
-		}
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Gemini HTTP Error: %v", err)
+		return "Aww, connection mein problem aa gayi. Thodi der mein phir baat karte hain. 💗"
 	}
-	return strings.TrimSpace(responseText)
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("JSON Decode Error: %v", err)
+		return "Aww, samajh nahi aaya kya bolun. 🦊"
+	}
+
+	// Extract text from response candidates
+	candidates, ok := result["candidates"].([]interface{})
+	if !ok || len(candidates) == 0 {
+		return "Aww, abhi mere paas jawab nahi hai. 🥹"
+	}
+
+	candidate, ok := candidates[0].(map[string]interface{})
+	if !ok {
+		return "Aww, abhi mere paas jawab nahi hai. 🥹"
+	}
+
+	content, ok := candidate["content"].(map[string]interface{})
+	if !ok {
+		return "Aww, abhi mere paas jawab nahi hai. 🥹"
+	}
+
+	parts, ok := content["parts"].([]interface{})
+	if !ok || len(parts) == 0 {
+		return "Aww, abhi mere paas jawab nahi hai. 🥹"
+	}
+
+	part, ok := parts[0].(map[string]interface{})
+	if !ok {
+		return "Aww, abhi mere paas jawab nahi hai. 🥹"
+	}
+
+	text, ok := part["text"].(string)
+	if !ok {
+		return "Aww, abhi mere paas jawab nahi hai. 🥹"
+	}
+
+	return strings.TrimSpace(text)
 }
 
-// Command Handler for /chatbot
 func chatbotCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 	message := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
@@ -125,7 +166,6 @@ func chatbotCommand(b *gotgbot.Bot, ctx *ext.Context) error {
 	return nil
 }
 
-// Filter to check if message should be processed
 func isChatbotMessage(msg *gotgbot.Message) bool {
 	if msg.Text == "" || strings.HasPrefix(msg.Text, "/") {
 		return false
@@ -136,7 +176,6 @@ func isChatbotMessage(msg *gotgbot.Message) bool {
 	return true
 }
 
-// Message Listener Handler
 func chatbotMessageListener(b *gotgbot.Bot, ctx *ext.Context) error {
 	message := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
@@ -145,7 +184,6 @@ func chatbotMessageListener(b *gotgbot.Bot, ctx *ext.Context) error {
 	if chat.Type == "private" {
 		shouldReply = true
 	} else {
-		// Group logic (DB check can be hooked here)
 		shouldReply = false
 	}
 
