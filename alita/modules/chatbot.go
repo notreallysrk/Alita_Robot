@@ -10,13 +10,12 @@ import (
 	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
-	"github.com/PaulSonOfLars/gotgbot/v2.0/ext"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
-	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 )
 
 func init() {
-	// Alita bot ke standard dispatcher loader ke sath command aur message register karna
+	// Alita bot ke standard module loader ke sath chatbot register karna
 	addModule(&Module{
 		ModuleName: "ChatBot",
 		Load: func(dispatcher *ext.Dispatcher) {
