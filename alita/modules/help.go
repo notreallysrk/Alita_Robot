@@ -116,11 +116,11 @@ func getAboutKb(tr *i18n.Translator, botUsername string) gotgbot.InlineKeyboardM
 			{
 				{
 					Text: newsChannelText,
-					Url:  "https://t.me/AlitaRobotUpdates",
+					Url:  "https://t.me/FoxryHQ",
 				},
 				{
 					Text: supportGroupText,
-					Url:  "https://t.me/DivideSupport",
+					Url:  "https://t.me/FoxryChat",
 				},
 			},
 			{
@@ -173,7 +173,7 @@ func getStartMarkup(tr *i18n.Translator, botUsername string) gotgbot.InlineKeybo
 				},
 				{
 					Text: supportGroupText,
-					Url:  "https://t.me/DivideSupport",
+					Url:  "https://t.me/FoxryChat",
 				},
 			},
 			{
