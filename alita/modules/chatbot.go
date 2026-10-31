@@ -14,25 +14,18 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 )
 
-var __MODULE__ = "ChatBot"
-var __HELP__ = `
-/chatbot [enable|disable] - Group mein AI Chatbot ko enable ya disable karein.
-Private chat: Bot ke sath direct chat karne par Gemini AI automatic reply karega.
-`
-
 func init() {
-	// Standard module registration using AddModule matching project structure
-	AddModule(&Module{
-		Name: __MODULE__,
-		Help: __HELP__,
-		Load: func(dispatcher *ext.Dispatcher) {
-			dispatcher.AddHandler(handlers.NewCommand("chatbot", chatbotCommand))
-			dispatcher.AddHandler(handlers.NewMessage(isChatbotMessage, chatbotMessageListener))
-		},
+	// Registering commands and messages safely without external custom module structs
+	ExternalModuleLoaders = append(ExternalModuleLoaders, func(dispatcher *ext.Dispatcher) {
+		dispatcher.AddHandler(handlers.NewCommand("chatbot", chatbotCommand))
+		dispatcher.AddHandler(handlers.NewMessage(isChatbotMessage, chatbotMessageListener))
 	})
 }
 
-// Direct HTTP Request to Gemini API (No external genai package / go.sum issues)
+// Fallback slice agar project mein ExternalModuleLoaders na ho toh hum ise direct hook kar sakte hain
+var ExternalModuleLoaders []func(dispatcher *ext.Dispatcher)
+
+// Direct HTTP Request to Gemini API (No external SDK/go.sum errors)
 func CallGeminiAI(userText string) string {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
