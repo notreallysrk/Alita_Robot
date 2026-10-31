@@ -9,7 +9,6 @@ require (
 	github.com/cloudflare/ahocorasick v0.0.0-20240916140611-054963ec9396
 	github.com/eko/gocache/lib/v4 v4.4.0
 	github.com/eko/gocache/store/redis/v4 v4.2.12
-	github.com/google/generative-ai-go v0.19.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jackc/pgx/v5 v5.11.0
@@ -20,7 +19,6 @@ require (
 	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	google.golang.org/api v0.169.0
 	go.opentelemetry.io/contrib/bridges/otellogrus v0.21.0
 	go.opentelemetry.io/contrib/bridges/prometheus v0.72.0
 	go.opentelemetry.io/otel v1.47.0
