@@ -10,28 +10,27 @@ import (
 	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
-	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/PaulSonOfLars/gotgbot/v2.0/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 )
 
-var __MODULE__ = "ChatBot"
-var __HELP__ = `
-/chatbot [enable|disable] - Group mein AI Chatbot ko enable ya disable karein.
-Private chat: Bot ke sath direct chat karne par Gemini AI automatic reply karega.
-`
-
 func init() {
-	AddModule(&Module{
-		Name: __MODULE__,
-		Help: __HELP__,
+	// Alita bot ke standard dispatcher loader ke sath command aur message register karna
+	addModule(&Module{
+		ModuleName: "ChatBot",
 		Load: func(dispatcher *ext.Dispatcher) {
 			dispatcher.AddHandler(handlers.NewCommand("chatbot", chatbotCommand))
 			dispatcher.AddHandler(handlers.NewMessage(isChatbotMessage, chatbotMessageListener))
 		},
+		Help: `
+/chatbot [enable|disable] - Group mein AI Chatbot ko enable ya disable karein.
+Private chat: Bot ke sath direct chat karne par Gemini AI automatic reply karega.
+`,
 	})
 }
 
-// Direct HTTP Request to Gemini API (No external genai package required)
+// Direct HTTP Request to Gemini API (No external packages/go.sum issues)
 func CallGeminiAI(userText string) string {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
@@ -108,7 +107,6 @@ IMPORTANT CONVERSATION RULES:
 		return "Aww, samajh nahi aaya kya bolun. 🦊"
 	}
 
-	// Extract text from response candidates
 	candidates, ok := result["candidates"].([]interface{})
 	if !ok || len(candidates) == 0 {
 		return "Aww, abhi mere paas jawab nahi hai. 🥹"
