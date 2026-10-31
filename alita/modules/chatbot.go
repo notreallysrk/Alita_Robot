@@ -14,22 +14,25 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 )
 
+var __MODULE__ = "ChatBot"
+var __HELP__ = `
+/chatbot [enable|disable] - Group mein AI Chatbot ko enable ya disable karein.
+Private chat: Bot ke sath direct chat karne par Gemini AI automatic reply karega.
+`
+
 func init() {
-	// Alita bot ke standard module loader ke sath chatbot register karna
-	addModule(&Module{
-		ModuleName: "ChatBot",
+	// Standard module registration using AddModule matching project structure
+	AddModule(&Module{
+		Name: __MODULE__,
+		Help: __HELP__,
 		Load: func(dispatcher *ext.Dispatcher) {
 			dispatcher.AddHandler(handlers.NewCommand("chatbot", chatbotCommand))
 			dispatcher.AddHandler(handlers.NewMessage(isChatbotMessage, chatbotMessageListener))
 		},
-		Help: `
-/chatbot [enable|disable] - Group mein AI Chatbot ko enable ya disable karein.
-Private chat: Bot ke sath direct chat karne par Gemini AI automatic reply karega.
-`,
 	})
 }
 
-// Direct HTTP Request to Gemini API (No external packages/go.sum issues)
+// Direct HTTP Request to Gemini API (No external genai package / go.sum issues)
 func CallGeminiAI(userText string) string {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
