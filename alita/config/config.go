@@ -292,6 +292,10 @@ type Config struct {
 	// feature is inert without TypeSafeAPIKey.
 	EnableAISpam   bool
 	TypeSafeAPIKey string
+
+	// Gemini-backed conversational chatbot. The feature stays inactive without a key.
+	GeminiAPIKey string
+	GeminiModel  string
 	// AISpamDailyLimit caps the Jev checks made per UTC day across every chat
 	// and replica; 0 (AISPAM_DAILY_LIMIT unset) means no cap.
 	AISpamDailyLimit int
@@ -514,6 +518,8 @@ func LoadConfig() (*Config, error) {
 
 		EnableAISpam:     typeConvertor{str: os.Getenv("ENABLE_AISPAM")}.Bool(),
 		TypeSafeAPIKey:   os.Getenv("TYPESAFE_API_KEY"),
+		GeminiAPIKey:     strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		GeminiModel:      strings.TrimSpace(os.Getenv("GEMINI_MODEL")),
 		AISpamDailyLimit: aispamDailyLimit,
 
 		EnableSpamDB: typeConvertor{str: os.Getenv("ENABLE_SPAMDB")}.Bool(),
