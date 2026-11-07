@@ -68,7 +68,7 @@ func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-version" || os.Args[1] == "-v") {
 		version := config.AppConfig.BotVersion
 		if version == "" {
-			version = "v2.28.0"
+			version = "v2.29.1"
 		}
 		fmt.Println(version)
 		os.Exit(0)
@@ -111,15 +111,17 @@ func main() {
 
 	log.Info("[Main] Initializing bot with optimized HTTP client (connection pooling enabled)")
 	b, err := gotgbot.NewBot(config.AppConfig.BotToken, &gotgbot.BotOpts{
-		BotClient: &gotgbot.BaseBotClient{
-			Client: http.Client{
-				Transport: tracing.BotAPITransport(transport),
-				Timeout:   constants.LongTimeout,
-			},
-			UseTestEnvironment: false,
-			DefaultRequestOpts: &gotgbot.RequestOpts{
-				Timeout: time.Duration(constants.LongTimeout),
-				APIURL:  resolveBotAPIURL(config.AppConfig.ApiServer),
+		BotClient: &helpers.ReplySafeBotClient{
+			BotClient: &gotgbot.BaseBotClient{
+				Client: http.Client{
+					Transport: tracing.BotAPITransport(transport),
+					Timeout:   constants.LongTimeout,
+				},
+				UseTestEnvironment: false,
+				DefaultRequestOpts: &gotgbot.RequestOpts{
+					Timeout: time.Duration(constants.LongTimeout),
+					APIURL:  resolveBotAPIURL(config.AppConfig.ApiServer),
+				},
 			},
 		},
 	})
@@ -254,9 +256,10 @@ func main() {
 
 	if config.AppConfig.PanelEnabled {
 		httpServer.RegisterPanel(panel.New(b, panel.Deps{
-			SessionMaxAge:  config.AppConfig.PanelSessionMaxAge,
-			LookupChats:    chats.ListChatsWithUser,
-			DisableCaptcha: modules.DisableCaptchaForChat,
+			SessionMaxAge:      config.AppConfig.PanelSessionMaxAge,
+			LookupChats:        chats.ListChatsWithUser,
+			DisableCaptcha:     modules.DisableCaptchaForChat,
+			NightModeLockTypes: modules.NightModeLockTypes(),
 		}))
 		log.Infof("[Main] Admin panel enabled at %s", config.AppConfig.PanelPublicURL)
 	}

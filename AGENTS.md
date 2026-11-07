@@ -90,7 +90,7 @@ CGO_ENABLED=0 go build ./...   # compile check
 - Repositories live in `alita/db/<domain>/`. Reads go through `cache.GetFromCacheOrLoad` with `cache.CacheKey` keys;
   every write calls `cache.DeleteCache` on each key it affects. The loader is `alita/db/cache`, not
   `alita/utils/cache`; its in-process layer is described in `alita/db/cache/local.go`.
-- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:probation:*`, `alita:aispam:*`) sit outside
+- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:probation:*`, `alita:aispam:*`, `alita:joinCaptcha:*`) sit outside
   the `alita:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps them.
 - `UpdateRecord` skips zero values; write `false`/`0`/`""` with `UpdateRecordWithZeroValues`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
@@ -146,6 +146,11 @@ CGO_ENABLED=0 go build ./...   # compile check
   document any pin with its reason and recheck trigger.
 - Release: `make bump-version` on a PR branch, merge, then tag `vX.Y.Z[-pre]`. `release.yml` runs no checks of its
   own and waits for `ci.yml` on the tagged commit, so a new release gate goes in `ci.yml`.
+- CI statically shards top-level names with `scripts/test_shard.sh`; the last shard runs the remainder, including
+  discovery misses. `Test Suite` keeps race/skip gates and concatenates atomic profiles for `go tool cover` to
+  merge before enforcing 78%. PostgreSQL integrity runs alongside.
+  Go cache families separate race/coverage, integrity, lint, build, security and docs; only main pushes save them.
+- `gosec.yml` scans main pushes and weekly outside PR CI; govulncheck remains a PR gate.
 - `.env` in cwd auto-loads without overriding real env: run `--version` smoke checks from `/tmp`. Surprising config
   defaults are listed in the `alita/config` package doc.
 

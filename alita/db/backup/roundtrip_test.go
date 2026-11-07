@@ -41,6 +41,7 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 		ChatId:                 srcChat,
 		Limit:                  9,
 		Action:                 "tmute",
+		FloodActionTime:        600,
 		DeleteAntifloodMessage: true,
 	}).Error)
 	require.NoError(t, db.DB.Create(&models.AntiRaidSettings{
@@ -53,10 +54,10 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 		ChatID: srcChat, UserID: 101, ApprovedBy: 202, Reason: "trusted",
 	}).Error)
 	require.NoError(t, db.DB.Create(&models.BlacklistSettings{
-		ChatId: srcChat, Word: "scam", Action: "tban", Reason: "custom reason",
+		ChatId: srcChat, Word: "scam", Action: "tban", ActionTime: 7200, Reason: "custom reason",
 	}).Error)
 	require.NoError(t, db.DB.Create(&models.CaptchaSettings{
-		ChatID: srcChat, Enabled: true, CaptchaMode: "text", Timeout: 9,
+		ChatID: srcChat, Enabled: true, JoinRequests: true, CaptchaMode: "text", Timeout: 9,
 		FailureAction: "mute", MaxAttempts: 8,
 	}).Error)
 	require.NoError(t, db.DB.Create(&models.ConnectionChatSettings{
@@ -167,6 +168,7 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	require.NotNil(t, antifloodData.Settings)
 	assert.Equal(t, 9, antifloodData.Settings.Limit)
 	assert.Equal(t, "tmute", antifloodData.Settings.Action)
+	assert.Equal(t, 600, antifloodData.Settings.FloodActionTime)
 	assert.True(t, antifloodData.Settings.DeleteAntifloodMessage)
 
 	antiraidData, err := exportAntiraidData(dstChat)
@@ -188,12 +190,14 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	require.Len(t, blacklistsData.Entries, 1)
 	assert.Equal(t, "scam", blacklistsData.Entries[0].Word)
 	assert.Equal(t, "tban", blacklistsData.Entries[0].Action)
+	assert.Equal(t, 7200, blacklistsData.Entries[0].ActionTime)
 	assert.Equal(t, "custom reason", blacklistsData.Entries[0].Reason)
 
 	captchaData, err := exportCaptchaData(dstChat)
 	require.NoError(t, err)
 	require.NotNil(t, captchaData.Settings)
 	assert.True(t, captchaData.Settings.Enabled)
+	assert.True(t, captchaData.Settings.JoinRequests)
 	assert.Equal(t, "text", captchaData.Settings.CaptchaMode)
 	assert.Equal(t, 9, captchaData.Settings.Timeout)
 	assert.Equal(t, "mute", captchaData.Settings.FailureAction)

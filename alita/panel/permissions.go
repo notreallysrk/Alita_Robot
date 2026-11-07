@@ -28,11 +28,16 @@ var settingsPermissions = map[string]permission{
 	// still holds: both writes restrict members, so the caller and the bot
 	// need the same right the captcha watcher uses.
 	"captcha":     permRestrict,
-	"antiflood":   permNone, // /setflood requires an admin and the bot admin
-	"antispam":    permNone, // /aispam and /spamdb only require an admin; /probation: settingsFieldPermission
-	"antiraid":    permNone, // /antiraid and the raid timers only require an admin
-	"locks":       permNone, // read-only summary
-	"log_channel": permNone, // read-only summary
+	"antiflood":   permNone,       // /setflood requires an admin and the bot admin
+	"antispam":    permNone,       // /aispam and /spamdb only require an admin; /probation: settingsFieldPermission
+	"antiraid":    permNone,       // /antiraid and the raid timers only require an admin
+	"warns":       permNone,       // /setwarnlimit, /setwarnmode and /setwarntime
+	"digest":      permNone,       // /digest requires an admin and the bot admin
+	"reports":     permNone,       // /reports; auto-mute: settingsFieldPermission
+	"timezone":    permChangeInfo, // /timezone checks can_change_info
+	"nightmode":   permNone,       // /nightmode checks an admin and the bot admin
+	"locks":       permNone,       // read-only summary
+	"log_channel": permNone,       // read-only summary
 }
 
 // settingsFieldPermission is the right one "<module>.<field>" change needs:
@@ -42,6 +47,9 @@ func settingsFieldPermission(module, field string) permission {
 	perm := settingsPermissions[module]
 	// /probation checks can_restrict_members, unlike /aispam and /spamdb.
 	if module == "antispam" && strings.HasPrefix(field, "probation_") {
+		perm = max(perm, permRestrict)
+	}
+	if module == "reports" && field == "mute_threshold" {
 		perm = max(perm, permRestrict)
 	}
 	return perm

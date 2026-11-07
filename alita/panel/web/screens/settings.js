@@ -26,6 +26,7 @@ const fieldInfo = {
 	"captcha.max_attempts": { label: "Attempts allowed", hint: "1 to 10", min: 1, max: 10 },
 	"antiflood.limit": { label: "Flood limit", unit: "msgs", hint: "Messages in a row before acting: 3 to 100, or 0 for off", max: 100 },
 	"antiflood.action": { label: "Flood action" },
+	"antiflood.action_time": { label: "Flood temp-ban/mute length", unit: "s", duration: true, hint: "60 seconds to 366 days; required for tban/tmute, cleared for other actions", max: 31622400 },
 	"antiflood.delete_messages": { label: "Delete flood messages" },
 	"antispam.aispam_enabled": { label: "AI spam detection" },
 	"antispam.spamdb_enabled": { label: "Check joins against spam databases" },
@@ -44,6 +45,19 @@ const fieldInfo = {
 	"antiraid.raid_time": { label: "Raid mode lasts", unit: "s", duration: true },
 	"antiraid.raid_action_time": { label: "Raid temp-ban length", unit: "s", duration: true },
 	"antiraid.auto_threshold": { label: "Auto raid mode at", unit: "joins/min", hint: "0 turns the automatic trigger off" },
+	"warns.limit": { label: "Warning limit", hint: "Warnings before acting: 1 to 100", min: 1, max: 100 },
+	"warns.mode": { label: "Warning action", hint: "Temp-ban and temp-mute need an action duration" },
+	"warns.action_time": { label: "Warning action duration", unit: "s", duration: true, hint: "For tban or tmute only: 1 minute to 366 days" },
+	"warns.expiry": { label: "Warnings expire after", unit: "s", duration: true, hint: "0 means never; otherwise 1 minute to 366 days" },
+	"digest.enabled": { label: "Weekly digest", hint: "Requires the operator's ENABLE_DIGEST switch" },
+	"digest.destination": { label: "Digest destination", hint: "Default uses the log channel if connected, otherwise the group" },
+	"reports.enabled": { label: "Member reports" },
+	"reports.mute_threshold": { label: "Auto-mute after reports", unit: "members", hint: "Different reporters: 2 to 20, or 0 for off; needs the restrict right", max: 20 },
+	"timezone.name": { label: "Chat timezone", hint: "IANA name, such as Asia/Kolkata; used by night mode and the activity heatmap" },
+	"nightmode.enabled": { label: "Night mode", hint: "Enable with a window and at least one lock type" },
+	"nightmode.start": { label: "Night mode starts", hint: "24-hour HH:MM in the chat timezone; enable night mode to edit" },
+	"nightmode.end": { label: "Night mode ends", hint: "24-hour HH:MM; a window can cross midnight" },
+	"nightmode.lock_types": { label: "Night lock types", hint: "Comma-separated /lock names, such as media,url; bots is not supported" },
 	"locks.active": { label: "Locked", hint: "Change them with /lock and /unlock in the group" },
 	"log_channel.bound": { label: "Log channel connected", hint: "Set one with /setlog" },
 };
@@ -69,6 +83,9 @@ const languageNames = {
 function optionLabel(moduleKey, option) {
 	if (moduleKey === "language") {
 		return languageNames[option] ?? option;
+	}
+	if (moduleKey === "digest" && option === "") {
+		return "Default";
 	}
 	return capitalize(option);
 }

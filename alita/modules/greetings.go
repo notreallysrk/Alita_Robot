@@ -657,17 +657,12 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 func (moduleStruct) newMember(bot *gotgbot.Bot, ctx *ext.Context) error {
 	chat := ctx.EffectiveChat
 	newMember := ctx.ChatMember.NewChatMember.MergeChatMember().User
-	var threadID int64
-	if ctx.EffectiveMessage != nil {
-		threadID = ctx.EffectiveMessage.MessageThreadId
-	}
-	chatCopy := *chat
 	captchaSettings, err := captcha.GetCaptchaSettingsContext(tracing.UpdateContext(ctx), chat.Id)
 	if err != nil {
 		log.Errorf("[Greetings][newMember] Failed to get captcha settings for chat %d: %v", chat.Id, err)
 		captchaSettings = &db.CaptchaSettings{Enabled: false}
 	}
-	if err := processSingleNewMember(bot, &chatCopy, threadID, newMember, captchaSettings != nil && captchaSettings.Enabled); err != nil {
+	if err := processSingleNewMember(bot, ctx, newMember, captchaSettings != nil && captchaSettings.Enabled); err != nil {
 		return err
 	}
 	return ext.EndGroups
@@ -741,21 +736,18 @@ func (moduleStruct) leftMember(bot *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
-func membershipDepsForJoin(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64) MembershipDeps {
+func membershipDepsForJoin(bot *gotgbot.Bot, ctx *ext.Context) MembershipDeps {
 	return MembershipDeps{
 		Claim: claimRecentJoinProcessing,
 		IsApproved: func(chatID, userID int64) bool {
 			return chat_status.IsApproved(bot, chatID, userID)
 		},
 		Challenge: func(user gotgbot.User) error {
-			ctxCopy := ext.Context{EffectiveChat: chat}
-			if threadID != 0 {
-				ctxCopy.EffectiveMessage = &gotgbot.Message{Chat: *chat, MessageThreadId: threadID}
-			}
+			ctxCopy := *ctx
 			if err := SendCaptcha(bot, &ctxCopy, user.Id, user.FirstName); err != nil {
-				// Without the right to mute, the newcomer gets the welcome
-				// as if captcha were off.
-				if errors.Is(err, errCaptchaDisabled) || errors.Is(err, errCaptchaCannotRestrict) {
+				// Only unenforceable challenges or fully rolled-back delivery
+				// failures fall through to the newcomer's welcome.
+				if errors.Is(err, errCaptchaDisabled) || errors.Is(err, errCaptchaCannotRestrict) || errors.Is(err, errCaptchaDeliverySkipped) {
 					return ErrChallengeDisabled
 				}
 				return err
@@ -766,19 +758,16 @@ func membershipDepsForJoin(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64)
 			startProbation(context.Background(), chatID, user)
 		},
 		Welcome: func(user gotgbot.User) error {
-			ctxCopy := ext.Context{EffectiveChat: chat}
-			if threadID != 0 {
-				ctxCopy.EffectiveMessage = &gotgbot.Message{Chat: *chat, MessageThreadId: threadID}
-			}
+			ctxCopy := *ctx
 			return SendWelcomeMessage(bot, &ctxCopy, user.Id, user.FirstName)
 		},
 	}
 }
 
-func processSingleNewMember(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64, newMember gotgbot.User, captchaEnabled bool) error {
-	outcome, err := ProcessSingleJoin(chat.Id, bot.Id, newMember, captchaEnabled, membershipDepsForJoin(bot, chat, threadID))
+func processSingleNewMember(bot *gotgbot.Bot, ctx *ext.Context, newMember gotgbot.User, captchaEnabled bool) error {
+	chat := ctx.EffectiveChat
+	outcome, err := ProcessSingleJoin(chat.Id, bot.Id, newMember, captchaEnabled, membershipDepsForJoin(bot, ctx))
 	if err != nil {
-		logJoinOperationError("Failed to process new member join", err)
 		return err
 	}
 	if outcome == JoinIgnore && newMember.Id != bot.Id {
@@ -807,19 +796,12 @@ func (moduleStruct) cleanService(bot *gotgbot.Bot, ctx *ext.Context) error {
 		}
 		captchaEnabled := captchaSettings != nil && captchaSettings.Enabled
 
-		var threadID int64
-		if msg != nil {
-			threadID = msg.MessageThreadId
+		var joinErr error
+		for _, member := range msg.NewChatMembers {
+			joinErr = errors.Join(joinErr, processSingleNewMember(bot, ctx, member, captchaEnabled))
 		}
-		chatCopyBase := *chat
-
-		if len(msg.NewChatMembers) > 0 {
-			deps := membershipDepsForJoin(bot, &chatCopyBase, threadID)
-			for _, outcome := range ProcessJoins(chat.Id, bot.Id, msg.NewChatMembers, captchaEnabled, deps) {
-				if outcome == JoinIgnore {
-					continue
-				}
-			}
+		if joinErr != nil {
+			return joinErr
 		}
 	}
 
@@ -838,9 +820,16 @@ func (moduleStruct) cleanService(bot *gotgbot.Bot, ctx *ext.Context) error {
 func (m moduleStruct) pendingJoins(bot *gotgbot.Bot, ctx *ext.Context) error {
 	defer error_handling.RecoverFromPanic("Greetings", "pendingJoins")
 
+	handled, captchaErr := handleJoinRequestCaptcha(bot, ctx)
+	if handled {
+		if captchaErr != nil {
+			return captchaErr
+		}
+		return ext.ContinueGroups
+	}
+
 	chat := ctx.ChatJoinRequest.Chat
 	user := ctx.ChatJoinRequest.From
-	joinReqStr := "join_request"
 
 	if !m.loadPendingJoins(chat.Id, user.Id) {
 
@@ -850,60 +839,58 @@ func (m moduleStruct) pendingJoins(bot *gotgbot.Bot, ctx *ext.Context) error {
 					log.Debugf("[Greetings] Expected error auto-approving join for user %d in chat %d: %v", user.Id, chat.Id, err)
 				} else {
 					log.Error(err)
-					return err
+					return errors.Join(captchaErr, err)
 				}
+			}
+			if captchaErr != nil {
+				return captchaErr
 			}
 			return ext.ContinueGroups
 		}
 
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		newUserText, _ := tr.GetString("greetings_join_request_new")
-		approveText, _ := tr.GetString("greetings_join_request_approve_btn")
-		declineText, _ := tr.GetString("greetings_join_request_decline_btn")
-		banText, _ := tr.GetString("greetings_join_request_ban_btn")
-		userInfoTemplate, _ := tr.GetString("format_user_info")
-		userIdTemplate, _ := tr.GetString("format_user_id")
-
-		_, err := helpers.SendMessageWithErrorHandling(
-			bot,
-			chat.Id,
-			fmt.Sprint(
-				newUserText,
-				"\n"+fmt.Sprintf(userInfoTemplate, formatting.MentionHtml(user.Id, user.FirstName)),
-				"\n"+fmt.Sprintf(userIdTemplate, user.Id),
-			),
-			&gotgbot.SendMessageOpts{
-				ParseMode: formatting.HTML,
-				ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-					InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
-						{
-							{
-								Text:         approveText,
-								CallbackData: encodeCallbackData(joinReqStr, map[string]string{"a": "accept", "u": fmt.Sprint(user.Id)}),
-							},
-							{
-								Text:         declineText,
-								CallbackData: encodeCallbackData(joinReqStr, map[string]string{"a": "decline", "u": fmt.Sprint(user.Id)}),
-							},
-						},
-						{
-							{
-								Text:         banText,
-								CallbackData: encodeCallbackData(joinReqStr, map[string]string{"a": "ban", "u": fmt.Sprint(user.Id)}),
-							},
-						},
-					},
-				},
-			},
-		)
-		if err != nil {
-			log.Error(err)
-			return err
+		if err := sendJoinRequestAdminNotice(bot, &chat, user, i18n.MustNewTranslator(lang.GetLanguage(ctx))); err != nil {
+			return errors.Join(captchaErr, err)
 		}
-		m.setPendingJoins(chat.Id, user.Id)
 	}
 
+	if captchaErr != nil {
+		return captchaErr
+	}
 	return ext.ContinueGroups
+}
+
+// sendJoinRequestAdminNotice preserves the manual join-request controls for
+// delivery failures and approvals Telegram could not complete.
+func sendJoinRequestAdminNotice(bot *gotgbot.Bot, chat *gotgbot.Chat, user gotgbot.User, tr *i18n.Translator) error {
+	newUserText, _ := tr.GetString("greetings_join_request_new")
+	approveText, _ := tr.GetString("greetings_join_request_approve_btn")
+	declineText, _ := tr.GetString("greetings_join_request_decline_btn")
+	banText, _ := tr.GetString("greetings_join_request_ban_btn")
+	userInfoTemplate, _ := tr.GetString("format_user_info")
+	userIdTemplate, _ := tr.GetString("format_user_id")
+	const namespace = "join_request"
+
+	_, err := helpers.SendMessageWithErrorHandling(bot, chat.Id,
+		fmt.Sprint(newUserText,
+			"\n"+fmt.Sprintf(userInfoTemplate, formatting.MentionHtml(user.Id, user.FirstName)),
+			"\n"+fmt.Sprintf(userIdTemplate, user.Id)),
+		&gotgbot.SendMessageOpts{
+			ParseMode: formatting.HTML,
+			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+				InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
+					{
+						{Text: approveText, CallbackData: encodeCallbackData(namespace, map[string]string{"a": "accept", "u": fmt.Sprint(user.Id)})},
+						{Text: declineText, CallbackData: encodeCallbackData(namespace, map[string]string{"a": "decline", "u": fmt.Sprint(user.Id)})},
+					},
+					{{Text: banText, CallbackData: encodeCallbackData(namespace, map[string]string{"a": "ban", "u": fmt.Sprint(user.Id)})}},
+				},
+			},
+		})
+	if err != nil {
+		return err
+	}
+	greetingsModule.setPendingJoins(chat.Id, user.Id)
+	return nil
 }
 
 //nolint:gocyclo // Validation and one-shot action handling stay together to prevent partial flows.

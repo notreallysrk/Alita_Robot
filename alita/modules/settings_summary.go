@@ -159,6 +159,7 @@ func captchaSettingsSection(ctx context.Context, chatID int64) settingsSection {
 	}
 	return settingsSection{Title: "Captcha", Rows: []settingsRow{
 		boolRow("/captcha", s.Enabled, false),
+		boolRow("/captchajoin", s.JoinRequests, false),
 		stringRow("/captchamode", s.CaptchaMode, settingsDefaultCaptchaMode),
 		intRow("/captchatime", s.Timeout, settingsDefaultCaptchaTimeout),
 		stringRow("/captchaaction", s.FailureAction, settingsDefaultCaptchaAction),
@@ -174,7 +175,7 @@ func antifloodSettingsSection(chatID int64) settingsSection {
 	}
 	return settingsSection{Title: "Antiflood", Rows: []settingsRow{
 		limit,
-		stringRow("/setfloodmode", f.Action, settingsDefaultFloodAction),
+		stringRow("/setfloodmode", floodModeLabel(f), settingsDefaultFloodAction),
 		boolRow("/delflood", f.DeleteAntifloodMessage, false),
 	}}
 }
@@ -267,7 +268,7 @@ func blacklistSettingsSection(chatID int64) settingsSection {
 	bl := blacklists.GetBlacklistSettings(chatID)
 	action := settingsDefaultBlacklistAction
 	if len(bl) > 0 && bl.Action() != "" {
-		action = bl.Action()
+		action = blacklistModeLabel(bl)
 	}
 	return settingsSection{Title: "Blacklists", Rows: []settingsRow{
 		countRow("/blacklists", len(bl)),

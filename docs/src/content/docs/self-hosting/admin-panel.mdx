@@ -151,10 +151,11 @@ checked against the bot token on arrival.
   says so instead of drawing an empty chart.
 - **Activity** shows the same window as a heatmap of messages by weekday and
   hour (each cell shaded by its average per day), with the busiest hour, and a
-  chart of the Telegram member count. Hours and weekdays are in UTC, and the
-  screen says so. The bot reads the member count once a day for each chat that
-  had activity yesterday or today, so the chart starts on the day the feature
-  was deployed and has no point for a day the chat was quiet.
+  chart of the Telegram member count. Heatmap hours and weekdays use the chat's
+  timezone (UTC by default), shown on screen. The bot reads the member count
+  once a day for each chat that had activity yesterday or today, so the chart
+  starts on the day the feature was deployed and has no point for a day the chat
+  was quiet.
 - **Top members** (admins only) ranks the users who sent the most messages in
   the window, named like the timeline. Channel posts and anonymous admins are
   not counted, and per-user counts are kept for 90 days.
@@ -163,6 +164,14 @@ checked against the bot token on arrival.
   once a value differs from it. Changes are saved together from a bar that
   appears at the bottom; leaving the screen or closing the panel with unsaved
   changes asks first (closing asks only on clients with Bot API 6.2 or later).
+  Antiflood offers `ban`, `kick`, `mute`, `tban` and `tmute`. For `tban` or
+  `tmute`, set **Flood temp-ban/mute length** in seconds (60 to 31,622,400,
+  or 1 minute to 366 days). A usable saved duration can be reused when switching
+  between temporary actions. Changing to an untimed action clears the duration;
+  changing only the duration while the action is untimed is refused. The API
+  exposes this value as `antiflood.action_time`, defaulting to `0` (unset), and
+  saves the action and duration together. Invalid settings reject the whole
+  batch before any values are written.
 - **Filters**, **Notes** and **Blacklists** search as you type, and admins
   can delete entries or bulk-import them from a folded import box that
   reports each line's result. Read-only viewers do not see the import box.
@@ -176,6 +185,114 @@ checked against the bot token on arrival.
   it out.
 - A user with no groups sees an empty state explaining how to add the bot or how
   to `/connect` a group.
+
+### Warning settings
+
+The **Warnings** group in **Settings** configures what happens when a member
+reaches the warning limit; the separate **Warnings** screen lists their warnings.
+
+| Setting | Default | Accepted values |
+|---------|---------|-----------------|
+| `warns.limit` | `3` | `1`–`100` warnings. |
+| `warns.mode` | `mute` | `ban`, `kick`, `mute`, `tban` (temporary ban), or `tmute` (temporary mute). |
+| `warns.action_time` | `0` (unset) | Punishment duration in seconds, `60`–`31622400` (366 days), for `tban` or `tmute`. |
+| `warns.expiry` | `0` (never) | How long a warning counts, in seconds: `0` to disable expiry, or `60`–`31622400` (366 days). |
+
+Choosing `tban` or `tmute` requires a usable duration in the same save or one
+already stored. Switching between timed modes keeps that duration; choosing
+`ban`, `kick`, or `mute` clears it. A duration cannot be saved on its own while
+the mode is untimed: save the timed mode and duration together. An invalid
+setting prevents the entire batch from being saved, including changes to other
+modules. Opening Settings does not create a warning settings row.
+
+### Weekly digest settings
+
+The **Weekly digest** group in **Settings** controls the chat's weekly activity
+summary. It is off until an admin enables it.
+
+| Setting | Default | Accepted values |
+|---------|---------|-----------------|
+| `digest.enabled` | `false` | On or off for this chat. |
+| `digest.destination` | **Default** (`""`) | **Default** (`""`), **Log channel** (`log`), or **Group** (`group`). |
+
+**Default** sends to the chat's log channel when one is bound, otherwise to the
+group. Resetting the destination saves an empty string, not the word `default`.
+**Log channel** is refused while the chat has no log channel, as `/digest log` is.
+Opening Settings only reads the digest choice; it does not create a settings row.
+
+The operator's `ENABLE_DIGEST` kill switch defaults to `true`. With
+`ENABLE_DIGEST=false`, no digests are sent and the panel refuses to enable them
+with “The digest is disabled by the bot operator.” Admins can still view the
+stored choice, turn it off, or change its destination.
+
+### Report settings
+
+The **Reports** group in **Settings** controls member reporting and its optional
+automatic mute.
+
+| Setting | Default | Accepted values |
+|---------|---------|-----------------|
+| `reports.enabled` | `true` | On or off for this chat. |
+| `reports.mute_threshold` | `0` (off) | `0` to disable auto-mute, or `2`–`20` different members with open reports against the same user. |
+
+Multiple reports from one member count only once toward the threshold. Resetting
+it to `0` turns auto-mute off without disabling reporting.
+
+Changing `reports.enabled` requires you and the bot to be chat admins.
+Changing `reports.mute_threshold`, including resetting it to `0`, additionally
+requires **both you and the bot** to have Telegram's `can_restrict_members`
+right. An invalid setting or missing right refuses the entire save, including
+changes to other modules. Opening Settings does not create a report settings row.
+
+### Timezone setting
+
+The **Timezone** group in **Settings** configures the same chat timezone as
+`/timezone`.
+
+| Setting | Default | Accepted values |
+|---------|---------|-----------------|
+| `timezone.name` | `UTC` | An IANA timezone such as `Asia/Kolkata` or `America/New_York`, or `UTC`. |
+
+Names are saved with their canonical spelling: `asia/kolkata` becomes
+`Asia/Kolkata`. Empty names, unknown zones, numeric offsets such as `+05:30`,
+and the server-local name `Local` are refused. Reset saves `UTC`.
+
+Changing or resetting the timezone requires you and the bot to be chat admins,
+and you must have Telegram's `can_change_info` right. An invalid value or missing
+right refuses the entire save, including changes to other modules. Opening
+Settings does not create a timezone row.
+
+The **Activity** heatmap uses this timezone. **Top members** and the **weekly
+digest** keep their UTC-based windows; changing the timezone does not shift them.
+
+### Night mode settings
+
+The **Night mode** group in **Settings** applies selected message locks during a
+daily window in the chat's **Timezone** (`UTC` by default), just like
+`/nightmode`. It is off until an admin enables it.
+
+| Setting | Default | Accepted values |
+|---------|---------|-----------------|
+| `nightmode.enabled` | `false` | On or off for this chat. |
+| `nightmode.start` | `00:00` | A 24-hour `HH:MM` time from `00:00` to `23:59`. |
+| `nightmode.end` | `00:00` | A different 24-hour `HH:MM` time from `00:00` to `23:59`. |
+| `nightmode.lock_types` | `""` | Comma-separated `/locktypes` names, such as `media,url`, or `all`; `bots` is excluded. |
+
+The start is inclusive and the end exclusive. An end before the start crosses
+midnight: `23:00`–`07:00` runs overnight. Start and end cannot be equal, and
+enabling requires at least one supported lock type. Types are case-insensitive;
+spaces and duplicates are removed, and names are saved in sorted order.
+
+To configure a chat while night mode is off, switch it on and save the window
+and types in the same batch. Saving configuration edits while it remains off
+is refused, even if you briefly switch it on and back off before saving.
+Turning it off by itself preserves the stored window and types, so turning it
+back on can reuse them. Locks configured with `/lock` are not changed.
+
+You and the bot must be chat admins to save these settings. An invalid time,
+unsupported type, empty type list when enabling, or refused off-state edit
+blocks the entire save, including changes to other modules. Opening Settings
+does not create a night mode settings row.
 
 ## Failure modes
 

@@ -74,7 +74,7 @@ func TestSettingsSummaryFreshChatHasNoChangedRows(t *testing.T) {
 func TestSettingsSummaryMarksExactlyChangedFields(t *testing.T) {
 	chatID := newSettingsTestChat(t)
 
-	if err := captcha.SetCaptchaEnabled(chatID, true); err != nil {
+	if err := captcha.SetCaptchaEnabled(chatID, "Captcha Chat", true); err != nil {
 		t.Fatalf("SetCaptchaEnabled() error = %v", err)
 	}
 	if err := warns.SetWarnLimit(chatID, 5); err != nil {
@@ -214,6 +214,36 @@ func TestSettingsSummaryTimedWarnModeShowsDuration(t *testing.T) {
 		if got.Value != tc.want || !got.Changed {
 			t.Errorf("%s/%d: /setwarnmode row = %+v, want changed value %q", tc.mode, tc.actionTime, *got, tc.want)
 		}
+	}
+}
+
+func TestSettingsSummaryFloodAndBlacklistModesShowEffectiveDuration(t *testing.T) {
+	for _, tc := range []struct {
+		mode       string
+		actionTime int
+		want       string
+	}{
+		{"tmute", 600, "tmute 10m"},
+		{"tban", 86400, "tban 1d"},
+		{"tmute", 0, "tmute 1h"},
+		{"tban", 30, "tban 1h"},
+		{"tmute", 366*86400 + 1, "tmute 1h"},
+		{"ban", 0, "ban"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			chatID := newSettingsTestChat(t)
+			if err := db.DB.Create(&models.AntifloodSettings{ChatId: chatID, Limit: 5, Action: tc.mode, FloodActionTime: tc.actionTime}).Error; err != nil {
+				t.Fatalf("Create(AntifloodSettings) error = %v", err)
+			}
+			if err := db.DB.Create(&models.BlacklistSettings{ChatId: chatID, Word: "spam", Action: tc.mode, ActionTime: tc.actionTime}).Error; err != nil {
+				t.Fatalf("Create(BlacklistSettings) error = %v", err)
+			}
+			for _, command := range []string{"/setfloodmode", "/blaction"} {
+				if got := settingsRowValue(t, chatID, command); got != tc.want {
+					t.Errorf("%s row = %q, want %q", command, got, tc.want)
+				}
+			}
+		})
 	}
 }
 

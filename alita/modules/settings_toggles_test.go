@@ -11,7 +11,9 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/divkix/Alita_Robot/alita/config"
+	"github.com/divkix/Alita_Robot/alita/db/antiflood"
 	"github.com/divkix/Alita_Robot/alita/db/cache"
+	"github.com/divkix/Alita_Robot/alita/db/captcha"
 	"github.com/divkix/Alita_Robot/alita/db/chats"
 	"github.com/divkix/Alita_Robot/alita/db/federations"
 	"github.com/divkix/Alita_Robot/alita/i18n"
@@ -126,6 +128,57 @@ func TestSettingsToggleSetsEveryValue(t *testing.T) {
 			if got := toggleButtons(t, markupOf(t, edit))[toggle.key]; got != toggle.next(value) {
 				t.Fatalf("%s button after a tap for %q offers %q, want %q", toggle.command, value, got, toggle.next(value))
 			}
+		}
+	}
+}
+
+func TestSettingsFloodToggleClearsTimedDuration(t *testing.T) {
+	f := settingsToggleFixture(t)
+	if err := antiflood.SetFloodMode(f.chat.Id, "tmute", 600); err != nil {
+		t.Fatalf("SetFloodMode() error = %v", err)
+	}
+
+	pressSettingsToggle(t, f, f.admin, "fm", "ban")
+	if text, alert := lastAnswer(t, f.client); alert {
+		t.Fatalf("flood toggle refused: %q", text)
+	}
+	if s := antiflood.GetFlood(f.chat.Id); s.Action != "ban" || s.FloodActionTime != 0 {
+		t.Fatalf("flood settings = %+v, want ban with cleared duration", s)
+	}
+	if got := settingsRowValue(t, f.chat.Id, "/setfloodmode"); got != "ban" {
+		t.Fatalf("/setfloodmode after toggle = %q, want ban", got)
+	}
+}
+
+func TestSettingsCaptchaTogglesPreserveChatTitle(t *testing.T) {
+	useRealLocales(t)
+	for _, toggle := range []struct {
+		key, command, value string
+	}{
+		{"cp", "/captcha", "on"},
+		{"cm", "/captchamode", "text"},
+		{"ca", "/captchaaction", "ban"},
+	} {
+		for _, existingBlank := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/existingBlank=%t", toggle.key, existingBlank), func(t *testing.T) {
+				f := newAdminChatFixture(t)
+				if existingBlank {
+					if err := chats.EnsureChatInDb(f.chat.Id, ""); err != nil {
+						t.Fatalf("create empty-name chat: %v", err)
+					}
+				}
+				pressSettingsToggle(t, f, f.admin, toggle.key, toggle.value)
+				if text, alert := lastAnswer(t, f.client); alert {
+					t.Fatalf("captcha toggle refused: %q", text)
+				}
+				assertCaptchaChatTitle(t, f.chat)
+				if got := settingsRowValue(t, f.chat.Id, toggle.command); got != toggle.value {
+					t.Fatalf("%s after toggle = %q, want %q", toggle.command, got, toggle.value)
+				}
+				if settings, err := captcha.GetCaptchaSettings(f.chat.Id); err != nil || settings == nil {
+					t.Fatalf("GetCaptchaSettings() = (%+v, %v), want saved settings", settings, err)
+				}
+			})
 		}
 	}
 }

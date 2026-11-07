@@ -51,6 +51,10 @@ func TestMain(m *testing.M) {
 		&models.WarnEntry{},
 		&models.ModerationEvent{},
 		&models.ProbationSettings{},
+		&models.DigestSettings{},
+		&models.ReportChatSettings{},
+		&models.ChatTimezone{},
+		&models.NightModeSettings{},
 	))
 }
 
