@@ -41,10 +41,10 @@ func BuildKeyboard(buttons []db.Button) [][]gotgbot.InlineKeyboardButton {
 	keyb := make([][]gotgbot.InlineKeyboardButton, 0)
 	for _, btn := range buttons {
 		if btn.SameLine && len(keyb) > 0 {
-			keyb[len(keyb)-1] = append(keyb[len(keyb)-1], gotgbot.InlineKeyboardButton{Text: btn.Name, Url: btn.Url})
+			keyb[len(keyb)-1] = append(keyb[len(keyb)-1], gotgbot.InlineKeyboardButton{Text: btn.Name, Url: btn.Url, Style: btn.Style})
 		} else {
 			k := make([]gotgbot.InlineKeyboardButton, 1)
-			k[0] = gotgbot.InlineKeyboardButton{Text: btn.Name, Url: btn.Url}
+			k[0] = gotgbot.InlineKeyboardButton{Text: btn.Name, Url: btn.Url, Style: btn.Style}
 			keyb = append(keyb, k)
 		}
 	}
