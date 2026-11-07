@@ -19,6 +19,9 @@ import (
 // trigger and what follows it.
 var quotedFilterKeywordRegex = regexp.MustCompile(`(?s)^"([^"]*)"(.*)$`)
 
+var greetingButtonStyleRegex = regexp.MustCompile(`\[([^]]+)\]\(buttonurl#(primary|success|danger)://([^)]*)\)`)
+var greetingButtonStylePrefixRegex = regexp.MustCompile(`buttonurl#(primary|success|danger)://`)
+
 var notesDirectiveReplacer = strings.NewReplacer(
 	"{private}", "",
 	"{admin}", "",
@@ -228,13 +231,13 @@ func ExtractWelcome(msg *gotgbot.Message, greetingType string, language string) 
 
 	if len(args) >= 1 && msg.ReplyToMessage == nil {
 		result.FileID = ""
-		result.Text, _buttons = tgmd2html.MD2HTMLButtonsV2(rawText)
+		result.Text, _buttons = tgmd2html.MD2HTMLButtonsV2(normalizeStyledButtonMarkup(rawText))
 		result.DataType = db.TEXT
 	} else if msg.ReplyToMessage != nil {
 		if replyMsg.ReplyMarkup == nil {
-			result.Text, _buttons = tgmd2html.MD2HTMLButtonsV2(rawText)
+			result.Text, _buttons = tgmd2html.MD2HTMLButtonsV2(normalizeStyledButtonMarkup(rawText))
 		} else {
-			result.Text, _ = tgmd2html.MD2HTMLButtonsV2(rawText)
+			result.Text, _ = tgmd2html.MD2HTMLButtonsV2(normalizeStyledButtonMarkup(rawText))
 			_buttons = inlineKeyboardToButtonV2(replyMsg.ReplyMarkup)
 		}
 		if len(args) == 0 && replyMsg.Text != "" {
@@ -245,8 +248,43 @@ func ExtractWelcome(msg *gotgbot.Message, greetingType string, language string) 
 	}
 
 	preFixes(_buttons, "Greeting", &result.Text, &result.DataType, result.FileID, &result.Buttons, &result.ErrorMsg, language)
+	applyGreetingButtonStyles(rawText, result.Buttons)
+	if replyMsg != nil && replyMsg.ReplyMarkup != nil {
+		applyReplyMarkupButtonStyles(replyMsg.ReplyMarkup, result.Buttons)
+	}
 
 	return result
+}
+
+func normalizeStyledButtonMarkup(raw string) string {
+	return greetingButtonStylePrefixRegex.ReplaceAllString(raw, "buttonurl://")
+}
+
+func applyGreetingButtonStyles(raw string, buttons []db.Button) {
+	matches := greetingButtonStyleRegex.FindAllStringSubmatch(raw, -1)
+	for i, match := range matches {
+		if i >= len(buttons) {
+			break
+		}
+		buttons[i].Style = match[2]
+	}
+}
+
+func applyReplyMarkupButtonStyles(markup *gotgbot.InlineKeyboardMarkup, buttons []db.Button) {
+	index := 0
+	for _, row := range markup.InlineKeyboard {
+		for _, button := range row {
+			if button.Url == "" || index >= len(buttons) {
+				continue
+			}
+			if button.Style == gotgbot.KeyboardButtonStylePrimary ||
+				button.Style == gotgbot.KeyboardButtonStyleSuccess ||
+				button.Style == gotgbot.KeyboardButtonStyleDanger {
+				buttons[index].Style = button.Style
+			}
+			index++
+		}
+	}
 }
 
 func NotesParser(sent string) (pvtOnly, grpOnly, adminOnly, webPrev, protectedContent, noNotif bool, sentBack string) {
@@ -345,12 +383,21 @@ func RevertButtons(buttons []db.Button) string {
 	var sb strings.Builder
 	for _, btn := range buttons {
 		if btn.SameLine {
-			fmt.Fprintf(&sb, "\n[%s](buttonurl://%s:same)", btn.Name, btn.Url)
+			fmt.Fprintf(&sb, "\n[%s](buttonurl%s://%s:same)", btn.Name, buttonStyleMarkup(btn.Style), btn.Url)
 		} else {
-			fmt.Fprintf(&sb, "\n[%s](buttonurl://%s)", btn.Name, btn.Url)
+			fmt.Fprintf(&sb, "\n[%s](buttonurl%s://%s)", btn.Name, buttonStyleMarkup(btn.Style), btn.Url)
 		}
 	}
 	return sb.String()
+}
+
+func buttonStyleMarkup(style string) string {
+	switch style {
+	case "primary", "success", "danger":
+		return "#" + style
+	default:
+		return ""
+	}
 }
 
 func inlineKeyboardToButtonV2(replyMarkup *gotgbot.InlineKeyboardMarkup) (btns []tgmd2html.ButtonV2) {

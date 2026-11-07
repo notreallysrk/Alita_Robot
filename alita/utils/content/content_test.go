@@ -308,6 +308,34 @@ func TestExtractWelcomeDirectText(t *testing.T) {
 	}
 }
 
+func TestExtractWelcomeStyledURLButtons(t *testing.T) {
+	useEnglishLocale(t)
+
+	msg := &gotgbot.Message{
+		Text: "/setwelcome Welcome!\n[Blue](buttonurl#primary://https://t.me/blue)\n[Green](buttonurl#success://https://t.me/green)\n[Red](buttonurl#danger://https://t.me/red)",
+	}
+	result := ExtractWelcome(msg, "welcome", "en")
+	if result.DataType != db.TEXT {
+		t.Fatalf("data type = %d, want TEXT; error = %q", result.DataType, result.ErrorMsg)
+	}
+	if len(result.Buttons) != 3 {
+		t.Fatalf("button count = %d, want 3", len(result.Buttons))
+	}
+	for i, want := range []string{"primary", "success", "danger"} {
+		if result.Buttons[i].Style != want {
+			t.Errorf("button %d style = %q, want %q", i, result.Buttons[i].Style, want)
+		}
+	}
+}
+
+func TestNormalizeStyledButtonMarkup(t *testing.T) {
+	input := "[Blue](buttonurl#primary://https://t.me/blue)"
+	want := "[Blue](buttonurl://https://t.me/blue)"
+	if got := normalizeStyledButtonMarkup(input); got != want {
+		t.Fatalf("normalized markup = %q, want %q", got, want)
+	}
+}
+
 func TestExtractWelcomeReplyMedia(t *testing.T) {
 	t.Parallel()
 
@@ -689,6 +717,17 @@ func TestRevertButtons(t *testing.T) {
 	expected := "\n[Btn1](buttonurl://https://example.com)\n[Btn2](buttonurl://https://test.com:same)"
 	if result != expected {
 		t.Fatalf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestRevertButtonsPreservesStyle(t *testing.T) {
+	buttons := []db.Button{
+		{Name: "Blue", Url: "https://t.me/blue", Style: "primary"},
+		{Name: "Green", Url: "https://t.me/green", Style: "success", SameLine: true},
+	}
+	want := "\n[Blue](buttonurl#primary://https://t.me/blue)\n[Green](buttonurl#success://https://t.me/green:same)"
+	if got := RevertButtons(buttons); got != want {
+		t.Fatalf("RevertButtons() = %q, want %q", got, want)
 	}
 }
 
