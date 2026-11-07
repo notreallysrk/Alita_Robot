@@ -21,6 +21,7 @@ type Button struct {
 	Name     string `gorm:"column:name" json:"name,omitempty"`
 	Url      string `gorm:"column:url" json:"url,omitempty"`
 	SameLine bool   `gorm:"column:btn_sameline;default:false" json:"btn_sameline" default:"false"`
+	Style    string `gorm:"column:style" json:"style,omitempty"`
 }
 
 type ButtonArray []Button
